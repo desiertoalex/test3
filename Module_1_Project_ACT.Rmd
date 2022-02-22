@@ -1,0 +1,352 @@
+
+---
+title: "Module 1 Project"
+author: Due Feb, 25th, 2022
+output: 
+  html_document:
+    float: yes
+    css: "style.css"    
+editor_options: 
+  chunk_output_type: console
+mainfont: Arial
+mathfont: Arial
+fontsize: 12pt
+subtitle: Alejandro Chávez Treviño
+---
+
+
+# {.tabset .tabset-pills .tabset-fade}
+
+## Background
+
+### Community analysis of winteirng grassland birds
+Grassland ecosystem vanishing leads to grassland-obligate species to decline and inevitable go extinct. Grassland birds are struggling as their populations show steep declines. Many of these species spend the winter in the Chihuahuan desert where shrub encroachment limits the grassland habitat. Shrub removal chemical treatments offer an alternative to mitigate shrub encroachment, enhance desert grasslands and provide wintering habitat for grassland birds survival. This analysis compares the community structure of wintering birds in three habitats: grassland, shrubland and herbicide treated sites for shrub removal.  
+
+
+## Prologue
+
+**Prologue:**
+
+**Name:**       Bird diversity structure and community shift in restored grasslands of the Chihuahuan Desert
+
+**Author:**     Alejandro Chávez Treviño
+
+**Data:**       "AllRecords.csv", "veg.csv"
+
+**Directory:**  "C:/Users/acxgd/OneDrive - University of Missouri/SRSU publication/Diversity"
+
+**Purpose:**    To quantify the change in bird communities between shrub invaded sites, pristine sites, before and after a shrub removal treatment in West Texas.
+
+**Created:**    February 2021
+
+**Last:**       January 25th 2022
+
+### Data collection
+
+During the winters of 2018 and 2019, we performed bird surveys in three private properties of West Texas. The three sites (Hughes-Sasser ranch, McKnight Ranch, Dixon Water Foundation (DWF)) are dedicated to livestock grazing year round. The first two properties follow a traditional year round grazing regime, whereas DWF has an experimental rotational grazing system. 
+The study sites were subdivided into strata depending on habitat and treatment (grassland, shrubland or treatment). Each strata was subsequently divided into 1km^2 grids. Ten grids were randomly selected as sampling units following a General Random Tessealtion Stratification method (GRTS) which provides a spatially balanced random selection. 
+
+```{r}
+#remove objects in the environment
+rm(list = ls())
+
+#set working directory
+setwd("C:/Users/acxgd/OneDrive - University of Missouri/Classes/Quantitative Methods/test3")
+```
+
+
+## Set up
+
+### Clear the environment
+```{r}
+rm(list=ls())
+```
+
+### Install packages
+```{r echo=FALSE}
+#packCH8 <- c("ade4", "adegraphics", "adespatial", "vegan", "ggplot2", "FD", "taxize", "vegetarian", "iNEXT", "BiodiversityR", "ggpubr", "cowplot")
+#install.packages(packCH8, dependencies = TRUE)
+```
+
+### Load libraries
+```{r results=FALSE, warning=FALSE, message=FALSE}
+
+library("ade4")
+library("adegraphics")
+library("vegan")
+library("BiodiversityR")
+library("tidyverse")
+```
+
+### Import files
+```{r}
+dat <- as_tibble(read.csv("AllRecords.csv"))
+veg <- as_tibble(read.csv("veg.csv")) #input data
+```
+
+## Data Management
+
+### Set up bird Data
+
+```{r}
+
+dat$CL_Count  <- as.numeric(dat$CL_Count)             #change variables to numeric
+dat$Grid.year <- paste(dat$grid, dat$YEAR, sep = "-") #create new column with the combination of grid and year to use as ID
+
+
+dat <- dat %>% select(stratum, grid, YEAR, BirdCode, perpDistance, CL_Count, Grid.year)        #remove columns I don't need
+unique(dat$BirdCode)                                                                           #check all the bird species
+dat <- dat[-which(   dat$BirdCode == "SPSP" |dat$BirdCode == "UNBI"|dat$BirdCode == "UNFA"|    #remove uncertain bird species codes
+                     dat$BirdCode == "UNHA" |dat$BirdCode == "UNLO"|dat$BirdCode == "UNME"|
+                     dat$BirdCode == "UNRA" |dat$BirdCode == "UNRV"|dat$BirdCode == "UNTR"|
+                     dat$BirdCode == "NOBI" |dat$BirdCode == "UNDU"|dat$BirdCode == "UNSP"),]
+unique(dat$BirdCode) #check bird species again
+
+```
+
+
+### Create Diveristy Matrix
+
+```{r}
+DIV_MAT <- tapply(dat$CL_Count, INDEX = list(dat$BirdCode, dat$Grid.year), FUN = sum) #This code creates a matrix adding all bird detections in a sampling unit
+DIV_MAT[is.na(DIV_MAT)] <- 0 #change NA to 0
+DIV_MAT <- t(DIV_MAT)        #invert the matrix for future analysis
+head(DIV_MAT)                #take a look
+
+#delete species with less than 50 detections
+DIV_MAT   <- DIV_MAT[, which(colSums(DIV_MAT) > 50)]
+
+```
+
+There are a maximum of 12 points per grid (1km2). I need to take the mean of these vegetation points to use this data in my bird sample unit (the same 1km2 grid cell)
+
+### Set up vegetation data
+
+```{r}
+veg$Grid.year <- paste(veg$Grid, veg$Season, sep="-") #create a column combining grid and year to make an ID
+
+#Summarize by grid and take the mean
+VEG <-  veg %>% 
+  
+  
+  group_by(Grid.year) %>%
+  
+  
+  summarise(Mean.shrub.50       = mean(gc_shrub_50m, na.rm=T),
+            Mean.grass.50       = mean(gc_grass_50m, na.rm=T),
+            Mean.bareground.50  = mean(gc_bare_50m, na.rm=T),
+            Mean.forb.50        = mean(gc_forb_50m, na.rm=T),
+            Mean.tumbleweed.50m = mean(gc_tumbleweed_50m, na.rm=T),
+            Mean.grass.height.50= mean(grass_height_50m, na.rm=T),
+            Mean.shrub.height.50= mean(shrub_height_50m, na.rm=T),
+            Mean.shrub.05       = mean(gc_shrub_05m, na.rm=T),
+            Mean.grass.05       = mean(gc_grass_05m, na.rm=T),
+            Mean.bareground.05  = mean(gc_bare_05m, na.rm=T),
+            Mean.forb.05        = mean(gc_forb_05m, na.rm=T),
+            Mean.tumbleweed.05m = mean(gc_tumbleweed_05m, na.rm=T),
+            Mean.grass.height.05= mean(grass_height_05m, na.rm=T),
+            Mean.shrub.height.05= mean(shrub_height_05m, na.rm=T),
+          
+            
+  ) 
+#i dont remember what is this for
+VEG$Grid.year.copy <- VEG$Grid.year 
+VEG <- separate(data = VEG, col = Grid.year.copy, into = c("Grid", "Year"), sep = "-")
+
+#Make stratum codes descriptive.
+VEG <- VEG %>% 
+          mutate(Habitat = case_when(
+                                     startsWith(Grid, "HC") ~ "Grassland",
+                                     startsWith(Grid, "MC") ~ "Grassland",
+                                     startsWith(Grid, "MI") ~ "Grassland",
+                                     startsWith(Grid, "MT") ~ "Shrubland"),
+    
+                Stratum = case_when(
+                                     startsWith(Grid, "HC") ~ "H-Grassland",
+                                     startsWith(Grid, "MC") ~ "M-Grassland",
+                                     startsWith(Grid, "MI") ~ "D-Grassland",
+                                     startsWith(Grid, "MT") ~ "M-Shrubland "))
+
+#Change habitat type of selected grid cells to "Treatment"
+VEG$Habitat[c(which(  VEG$Grid.year == "HT1-2020"  | VEG$Grid.year == "HT4-2020"  |
+                      VEG$Grid.year == "HT5-2020"  | VEG$Grid.year == "HT8-2020"  |  
+                      VEG$Grid.year == "HT12-2020" | VEG$Grid.year == "HT13-2020" |
+                      VEG$Grid.year == "HT14-2020" | VEG$Grid.year == "HT18-2020" |
+                      VEG$Grid.year == "HT20-2020" | VEG$Grid.year == "HT22-2020"))] <- "Treatment"
+
+
+VEG$Habitat[c(which(is.na(VEG$Habitat)))] <- "Shrubland"
+VEG$Stratum[c(which(is.na(VEG$Stratum)))] <- paste("H",VEG$Habitat[c(which(is.na(VEG$Stratum)))], sep = "-")
+VEG$Stratum_year <- paste(VEG$Stratum,VEG$Year, sep = "-")
+
+#I am not analyzing this veg data because I dont have bird data to relate it to. so I am deleteing these records.
+VEG <-   VEG[-which(VEG$Grid.year == "MI17-2019" | VEG$Grid.year == "MI1-2019" |
+                    VEG$Grid.year == "MI2-2019"  | VEG$Grid.year == "MI3-2019" |
+                    VEG$Grid.year == "MI4-2019"  | VEG$Grid.year == "MI5-2019" |
+                    VEG$Grid.year == "MI6-2019"  | VEG$Grid.year == "MI7-2019" |
+                    VEG$Grid.year == "MI8-2019"  | VEG$Grid.year == "MI9-2019" |
+                    VEG$Grid.year == "MI10-2019"),]
+
+
+
+```
+
+## NMDS
+### Non-metric multidimensional scaling
+This is a non-metric multidimensional scaling. This method allow to make ordinations in a flexible way. Input data has less assumptions and constraints
+
+```{r}
+NMDS_1 <- metaMDS(DIV_MAT, k = 2, trymax = 500, distance = "bray", autotransform = F )
+#N2 <- metaMDS(n, k = 2, trymax = 500, distance = "bray", autotransform = T )
+stressplot(NMDS_1)
+plot(NMDS_1$points)
+```
+
+## ADONIS (PERMANOVA)
+### ADONIS (PERMANOVA)
+This method allos us to test differences between communities
+```{r}
+#adonis:vegan Permutational Multivariate Analysis of Variance Using Distance Matrices test to see if communities are significantly different
+DISTANCE <- t(as.matrix(vegdist(DIV_MAT, method = "bray")))    #estimate distances
+#distance <- as_tibble(distance)                         #make tibble
+#distance <- distance %>% mutate(grid_year = colnames(distance)) #add grid_year column
+
+VEG_DISTANCE <- as.tibble(cbind(VEG, as.tibble(DISTANCE)))
+
+#all_dist <- veg_distance %>%
+# select(all_of(.[["grid_year"]])) %>%#punto significa la tibble fluyendo en el pipe
+
+#as.dist()
+#adonis permutation based test. Alldist by habitat, "data =" means take habitat variable from here.
+adonis2(DISTANCE~Stratum, data = VEG_DISTANCE) 
+PERMANOVA_hab <- adonis2(DISTANCE~Habitat, data = VEG_DISTANCE)
+PERMANOVA_hab
+```
+
+
+
+There is a significant difference between the bird communities in the three stratums. "Grassland", "Shurbland" and "Treatment"
+
+## Plots
+```{r warning=FALSE}
+#plot NMDS 1
+data_scores <- as.data.frame(cbind(scores(NMDS_1), VEG))
+#data_scores2<- as.data.frame(cbind(scores(NMDS_2), VEG))
+
+
+NMDS_PLOT <- ggplot(data_scores, aes(x = NMDS1, y = NMDS2, color = Habitat, fill = Habitat)) + 
+                    geom_text(label = "stress = 0.166", x = -1.23, y = -0.7, color = "black") +
+                    stat_ellipse(geom = "polygon" ,level = 0.5, alpha = 0.3, show.legend = FALSE)+
+                    geom_point() +
+                    ylim(-1.4,1.1)+
+                    coord_fixed()+
+                    labs(x = "NMDS Axis 1", 
+                    y = "NMDS Axis 2") + 
+                    scale_color_manual(name = NULL,
+                                       breaks = c("Grassland",
+                                                  "Shrubland",
+                                                  "Treatment"),
+                                       values = c("gray","green" ,"red"),
+                                       labels = c("Grassland","Shrubland","Treatment")) +
+  
+                   scale_fill_manual(name = NULL,
+                                     breaks = c("Grassland", "Shrubland","Treatment"),
+                                     values = c("lightgray","lightgreen" ,"pink"),
+                                     labels = c("Grassland","Shrubland","Treatment")) +
+  
+  theme_classic() +
+  theme(
+    legend.key.height = unit(0.4, "cm"),
+    legend.position = c(0.17,0.13),
+    legend.background = element_rect(fill="NA",
+                                     color = "black"),
+    legend.margin = margin(t = 0, r = 8, b = 8, l = 2))
+
+NMDS_PLOT
+
+ggsave("NMDS_Quantitative_Methods.jpg", width = 4.5, height = 5)
+
+ggsave("NMDS.jpg", width = 4.5, height = 5)
+
+
+```
+
+##Plot enviromental varaibles in the ordination
+
+```{r warning=FALSE}
+#plot env
+Env      <- envfit(NMDS_1, VEG, permutations = 9999, na.rm = TRUE) #fits enviromental variables onto the ordination
+Env$vectors
+Env$factors$pvals
+```
+
+Most variables in 50 and 05 scale are auto correlated. I will just use the 50m scale data. I will plot shrub cover, shrub height, grass cover and tumbleweed cover. The variable year that accounts for annual variation was not significative different between 2019 and 2020.
+
+```{r}
+Vectors <- as_tibble(Env$vectors$arrows)
+vectors <- as_tibble(Env$vectors$arrows[c(1,2,5,7), 1:2])          #select the vectors values for shub cover, shrub height, grass cover and tumbleweed cover.
+vectors$var <- c("shrubs", "grass", "tumbleweed", "shrub height")  #naming vectors rows
+
+species     <- as.tibble(NMDS_1$species)                           #adding species names
+species$spp <- rownames(NMDS_1$species)
+```
+
+```{r warning=FALSE}
+ggplot()+
+  stat_ellipse(data = data_scores, aes(x = NMDS1, y = NMDS2, color = Habitat, fill = Habitat),
+               geom = "polygon", level = 0.9, alpha = 0.3, show.legend = TRUE) +
+  coord_fixed()+
+  labs(x = "NMDS Axis 1", 
+       y = "NMDS Axis 2") +
+  
+  scale_color_manual(name = NULL,
+                     breaks = c("Grassland",
+                                "Shrubland",
+                                "Treatment"),
+                     values = c("gray","green" ,"red"),
+                     labels = c("Grassland",
+                                "Shrubland",
+                                "Treatment")) +
+  
+  scale_fill_manual(name = NULL,
+                    breaks = c("Grassland",
+                               "Shrubland",
+                               "Treatment"),
+                    values = c("lightgray","lightgreen" ,"pink"),
+                    labels = c("Grassland",
+                               "Shrubland",
+                               "Treatment")) +
+  
+  
+  
+  geom_segment(data = vectors, aes(x = 0, y = 0, xend = NMDS1, yend= NMDS2), 
+               size = 2, alpha = 0.8,
+               arrow = arrow(length =unit(0.3,"cm"))) +
+  
+  geom_text(data = vectors, 
+            aes(x =NMDS1, y = NMDS2, label = var, fontface = "bold"),
+            nudge_y = -0.08, nudge_x = 0.08)+
+  
+  geom_text(data = species, aes(x = MDS1, y = MDS2, label = spp),    #add points as species code
+            size = 3, check_overlap = T) +
+  
+  theme_classic() +
+  xlim(-1.8,1.8)+
+  theme(
+    legend.key.height = unit(0.4, "cm"),
+    legend.position = c(0.15,0.15),
+    legend.background = element_rect(fill="NA",
+                                     color = "black"),
+    legend.margin = margin(t = 0, r = 8, b = 8, l = 2))
+
+
+
+
+
+ggsave("NMDS_Env_Quantitative_Methods.jpg", width = 4.5, height = 5)
+```
+
+
+
+
+
